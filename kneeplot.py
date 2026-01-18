@@ -1,6 +1,26 @@
+"""Plot a barcode rank knee curve to find the inflection point in read counts."""
+
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+# ----------------------------------
+# USER SETTINGS (edit in PyCharm)
+# ----------------------------------
+DATA_DIR = "processed_data"
+DATA_FILE = "JRG08-2PMP_bc1_cumulative_frequency_table.txt"
+FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
+
+# Matplotlib formatting
+MPL_DPI = 120
+MPL_FONT_SIZE = 11
+MPL_FIGSIZE = (7, 5)
+
+plt.rcParams.update({
+    "figure.dpi": MPL_DPI,
+    "font.size": MPL_FONT_SIZE,
+})
 
 # ----------------- SETTINGS YOU CAN TWEAK -----------------
 # Axis limits (set to None to auto-scale)
@@ -13,9 +33,8 @@ Y_MAX = 1.0       # e.g. 0.5 to zoom in
 
 # 1. Read your table
 df = pd.read_csv(
-    "~/PhETRIseq/together/JRG08-2PMP_output/JRG08-2PMP_bc1_cumulative_frequency_table.txt", #"data/JRG09-UI_bc1_cumulative_frequency_table.txt",
+    FILE_PATH,
     sep="\t"
-
 )
 
 print(df.columns)  # sanity check
@@ -61,7 +80,7 @@ print(f"Approx knee at rank {knee_rank}, cum_frac={knee_cum:.3f}, "
       f"count={knee_count}, bc={knee_bc}")
 
 # ----------------- PLOT KNEEPLOT -----------------
-plt.figure(figsize=(7, 5))
+plt.figure(figsize=MPL_FIGSIZE)
 
 # main curve
 plt.plot(df["rank"], df["cum_frac"], marker=".", linestyle="-", linewidth=1)

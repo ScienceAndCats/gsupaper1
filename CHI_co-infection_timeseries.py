@@ -1,3 +1,6 @@
+"""Analyze phage co-infection rates over time and visualize observed vs expected counts."""
+
+import os
 import scanpy as sc
 import numpy as np
 from scipy import sparse
@@ -5,6 +8,42 @@ import matplotlib.pyplot as plt
 from scipy.stats import chisquare
 import pandas as pd
 import plotly.graph_objects as go
+
+# ----------------------------------
+# USER SETTINGS (edit in PyCharm)
+# ----------------------------------
+DATA_DIR = "processed_data"
+# Use a gene-matrix text file like in your SVM script:
+# rows = cells, columns = genes, tab-separated, first column = cell IDs
+DATA_FILE = "JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
+FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
+
+# Matplotlib formatting
+MPL_DPI = 120
+MPL_FONT_SIZE = 11
+MPL_TABLE_FIGSIZE = (6, 3)
+MPL_BAR_FIGSIZE = (6, 4)
+
+# Plotly formatting
+PLOTLY_TEMPLATE = "plotly_white"
+PLOTLY_FONT_FAMILY = "Arial"
+PLOTLY_FONT_SIZE = 12
+PLOTLY_TABLE_WIDTH = 800
+PLOTLY_TABLE_HEIGHT = 400
+
+plt.rcParams.update({
+    "figure.dpi": MPL_DPI,
+    "font.size": MPL_FONT_SIZE,
+})
+
+
+def apply_plotly_style(fig):
+    fig.update_layout(
+        template=PLOTLY_TEMPLATE,
+        font=dict(family=PLOTLY_FONT_FAMILY, size=PLOTLY_FONT_SIZE),
+    )
+    return fig
+
 
 ########################################
 # 1) Define classify_cell function
@@ -20,16 +59,20 @@ def classify_cell(cell_name):
     else:
         return "20min"
 
+
 ########################################
 # 2) Load data and filter
+#    Now starts from a gene-matrix text file
 ########################################
 
-# With h5ad file
-file_path = "working_data/preprocessed_PETRI_outputs/13Nov2024RTmultiinfection_15000/RTmulti_mixed_species_gene_matrix_preprocessed.h5ad"
-adata = sc.read_h5ad(file_path)
-
-#file_path = "working_data/Unprocessed_data/13Nov2024RTmultiinfection/13Nov24_RT_multi_infection_gene_matrix.txt"
-#adata = sc.read(file_path, delimiter="\t")  # Use delimiter="\t" for tab-separated
+if FILE_PATH.endswith(".h5ad"):
+    # Still allow h5ad if you ever want it
+    adata = sc.read_h5ad(FILE_PATH)
+else:
+    # Gene matrix text file: tab-separated, first column is cell IDs
+    raw_data = pd.read_csv(FILE_PATH, sep="\t", index_col=0)
+    # Convert to AnnData (cells = obs, genes = var)
+    adata = sc.AnnData(raw_data)
 
 print(adata)
 
@@ -100,6 +143,7 @@ def diff_color(val, vmin, vmax):
         b = int(255 * (1 - frac))
     return f"rgb({r},{g},{b})"
 
+
 ########################################
 # 5) Loop over each timepoint, do the
 #    infection analysis & chi-square
@@ -166,7 +210,7 @@ for tp in timepoints:
         print(f"    {cat}: Obs={obs}, Exp={int(round(exp))}")
 
     # Make a quick table (matplotlib) for this timepoint
-    fig, ax = plt.subplots(figsize=(6, 3))
+    fig, ax = plt.subplots(figsize=MPL_TABLE_FIGSIZE)
     ax.set_axis_off()
     table_values = pd.DataFrame({
         "Observed": [int(x) for x in observed_list],
@@ -183,7 +227,7 @@ for tp in timepoints:
     )
     table.auto_set_font_size(False)
     table.set_fontsize(8)
-    table.auto_set_column_width([0,1,2])
+    table.auto_set_column_width([0, 1, 2])
     plt.title(f"Chi-Square Obs vs Exp ({tp})", fontsize=12)
     plt.tight_layout()
     plt.show()
@@ -219,12 +263,14 @@ for tp in timepoints:
     )])
     fig.update_layout(
         title=f"Observed vs Expected - Chi-Square Difference ({tp})",
-        height=500
+        height=PLOTLY_TABLE_HEIGHT,
+        width=PLOTLY_TABLE_WIDTH,
     )
+    apply_plotly_style(fig)
     fig.show()
 
-    # Stacked bar (well, single bar set) for this timepoint
-    plt.figure(figsize=(6, 4))
+    # Stacked bar (single bar set) for this timepoint
+    plt.figure(figsize=MPL_BAR_FIGSIZE)
     bars = plt.bar(categories_order, observed_list, edgecolor="black")
     for bar in bars:
         yval = bar.get_height()
