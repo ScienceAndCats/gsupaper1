@@ -1,29 +1,55 @@
+"""Build a heatmap of phage gene expression by timepoint."""
+
+import os
 import scanpy as sc
 import pandas as pd
 import numpy as np
-import dash
-from dash import dcc, html, Input, Output, State
 import plotly.express as px
 
+# ----------------------------------
+# USER SETTINGS (edit in PyCharm)
+# ----------------------------------
+DATA_DIR = "processed_data"
+DATA_FILE = "luz19timeseries/luz19timeseries_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
+FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
+
+# Plotly formatting
+PLOTLY_TEMPLATE = "plotly_white"
+PLOTLY_FONT_FAMILY = "Arial"
+PLOTLY_FONT_SIZE = 12
+
+def apply_plotly_style(fig):
+    fig.update_layout(
+        template=PLOTLY_TEMPLATE,
+        font=dict(family=PLOTLY_FONT_FAMILY, size=PLOTLY_FONT_SIZE),
+    )
+    return fig
+
+# Notes:
+# - Displays mean expression for luz19 genes by timepoint.
+# - Expected input is a tab-delimited gene expression matrix in processed_data.
 
 
-"""
-This just displays a heatmap of the phage genes by time point. You can customize abunch of stuff in it.
-It displays MEAN gene expression.
 
 
-Plug in this data:
-working_data/preprocessed_PETRI_outputs/09Oct2024_Luz19_0-40min_18000/09Oct2024_mixed_species_gene_matrix_preprocessed.txt
-
-gp0.1,gp1,gp2,gp3,gp4,gp5,gp6,gp7,gp8,gp9,gp10,gp11,gp12,gp12.1,gp13,gp13.1,gp14,gp15,gp16,gp18,gp19,gp20,gp21,gp22,gp23,gp24,gp25,gp25.1,gp26,gp27,gp28,gp29,gp30,gp31,gp32,gp33,gp34,gp35,gp36,gp37,gp38,gp39,gp40,gp41,gp42,gp43,gp44,gp45,gp46,gp46.1,gp47,gp48,gp49
-
-"""
-
-
-
-
-# Initialize Dash app
-app = dash.Dash(__name__)
+# ----------------------------------
+# HEATMAP SETTINGS (edit in PyCharm)
+# ----------------------------------
+MIN_COUNTS_CELLS = 4
+MIN_COUNTS_GENES = 4
+ZMIN = 0
+ZMAX = 1
+TITLE_FONT_SIZE = 20
+AXIS_TITLE_FONT_SIZE = 14
+X_TICK_FONT_SIZE = 12
+Y_TICK_FONT_SIZE = 12
+LEGEND_FONT_SIZE = 12
+PLOT_TITLE = "Heatmap of 'luz19' Gene Expression Across Timepoints"
+X_AXIS_LABEL = "Timepoint"
+Y_AXIS_LABEL = "Gene"
+GENE_ORDER = ""
+GRAPH_WIDTH = 800
+GRAPH_HEIGHT = 600
 
 # Load and preprocess the dataset
 def load_and_preprocess_data(file_name, min_counts_cells=4, min_counts_genes=4):
@@ -95,124 +121,8 @@ def create_bulk_df(adata):
 
 
 
-# App layout with additional inputs for custom text, font sizes, and graph size.
-app.layout = html.Div([
-    html.Label("Set CSV file name:"),
-    dcc.Input(
-        id="file-name-input", type="text",
-        value='09Oct2024_luz19_initial_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt'
-    ),
-    html.Br(),
-    html.Label("Set color scale minimum (zmin):"),
-    dcc.Input(
-        id="yaxis-min-input", type="number", value=0, step=1
-    ),
-    html.Br(),
-    html.Label("Set color scale maximum (zmax):"),
-    dcc.Input(
-        id="yaxis-max-input", type="number", value=1, step=0.2
-    ),
-    html.Br(),
-    html.Label("Set Title Font Size:"),
-    dcc.Input(
-        id="title-font-size-input", type="number", value=20, step=1
-    ),
-    html.Br(),
-    html.Label("Set Axis Title Font Size:"),
-    dcc.Input(
-        id="axis-title-font-size-input", type="number", value=14, step=1
-    ),
-    html.Br(),
-    html.Label("Set X Tick Font Size:"),
-    dcc.Input(
-        id="x-tick-font-size-input", type="number", value=12, step=1
-    ),
-    html.Br(),
-    html.Label("Set Y Tick Font Size:"),
-    dcc.Input(
-        id="y-tick-font-size-input", type="number", value=12, step=1
-    ),
-    html.Br(),
-    html.Label("Set Legend Font Size:"),
-    dcc.Input(
-        id="legend-font-size-input", type="number", value=12, step=1
-    ),
-    html.Br(),
-    html.Label("Set Plot Title:"),
-    dcc.Input(
-        id="plot-title-input", type="text",
-        value="Heatmap of 'luz19' Gene Expression Across Timepoints"
-    ),
-    html.Br(),
-    html.Label("Set X-Axis Label:"),
-    dcc.Input(
-        id="x-axis-label-input", type="text", value="Timepoint"
-    ),
-    html.Br(),
-    html.Label("Set Y-Axis Label:"),
-    dcc.Input(
-        id="y-axis-label-input", type="text", value="Gene"
-    ),
-    html.Br(),
-    html.Label("Set Gene Order (comma-separated):"),
-    dcc.Input(
-        id="gene-order-input", type="text", value="",
-        placeholder="Enter gene names separated by commas"
-    ),
-    html.Br(),
-    html.Label("Set Graph Width (in px):"),
-    dcc.Input(
-        id="graph-width-input", type="number", value=800, step=10
-    ),
-    html.Br(),
-    html.Label("Set Graph Height (in px):"),
-    dcc.Input(
-        id="graph-height-input", type="number", value=600, step=10
-    ),
-    html.Br(),
-    html.Button("Update Heatmap", id="update-button", n_clicks=0),
-    dcc.Loading(
-        id="loading-spinner",
-        type="default",
-        children=[html.Div(id='plots-container')]
-    ),
-    # Store the aggregated bulk DataFrame as JSON
-    dcc.Store(id="umap-data"),
-    # Store the raw (unprocessed) DataFrame as JSON
-    dcc.Store(id="raw-data"),
-    html.Button("Download Selected Points", id="download-btn", n_clicks=0),
-    dcc.Download(id="download-dataframe")
-])
-
-# Callback to update the heatmap based on inputs.
-@app.callback(
-    [Output("plots-container", "children"),
-     Output("umap-data", "data"),
-     Output("raw-data", "data")],
-    Input("update-button", "n_clicks"),
-    State("file-name-input", "value"),
-    State("yaxis-min-input", "value"),
-    State("yaxis-max-input", "value"),
-    State("title-font-size-input", "value"),
-    State("axis-title-font-size-input", "value"),
-    State("x-tick-font-size-input", "value"),
-    State("y-tick-font-size-input", "value"),
-    State("legend-font-size-input", "value"),
-    State("plot-title-input", "value"),
-    State("x-axis-label-input", "value"),
-    State("y-axis-label-input", "value"),
-    State("gene-order-input", "value"),
-    State("graph-width-input", "value"),
-    State("graph-height-input", "value"),
-    prevent_initial_call=True
-)
-def update_heatmap(n_clicks, file_name, yaxis_min, yaxis_max,
-                   title_font_size, axis_title_font_size,
-                   x_tick_font_size, y_tick_font_size, legend_font_size,
-                   plot_title, x_axis_label, y_axis_label,
-                   gene_order_str, graph_width, graph_height):
-    # Load and preprocess the data using default filtering values
-    adata, raw_data = load_and_preprocess_data(file_name, 4, 4)
+def build_heatmap():
+    adata, raw_data = load_and_preprocess_data(FILE_PATH, MIN_COUNTS_CELLS, MIN_COUNTS_GENES)
 
     # Aggregate the single-cell data into bulk data (only for genes containing "luz19")
     bulk_melt = create_bulk_df(adata)
@@ -228,9 +138,9 @@ def update_heatmap(n_clicks, file_name, yaxis_min, yaxis_max,
     heat_df.index = heat_df.index.str.replace("luz19:", "", regex=False)
 
     # If a custom gene order is provided, reorder the rows accordingly.
-    if gene_order_str and gene_order_str.strip():
+    if GENE_ORDER and GENE_ORDER.strip():
         # Parse the comma-separated gene names
-        gene_order_list = [gene.strip() for gene in gene_order_str.split(',') if gene.strip()]
+        gene_order_list = [gene.strip() for gene in GENE_ORDER.split(',') if gene.strip()]
         # Only use genes that exist in the current DataFrame.
         new_order = [gene for gene in gene_order_list if gene in heat_df.index]
         # Append any genes not mentioned.
@@ -241,54 +151,33 @@ def update_heatmap(n_clicks, file_name, yaxis_min, yaxis_max,
     # Create heatmap using px.imshow.
     fig = px.imshow(
         heat_df,
-        labels=dict(x=x_axis_label, y=y_axis_label, color="Expression"),
+        labels=dict(x=X_AXIS_LABEL, y=Y_AXIS_LABEL, color="Expression"),
         x=columns_order,
         y=heat_df.index,
         aspect="auto",
-        zmin=yaxis_min,
-        zmax=yaxis_max
+        zmin=ZMIN,
+        zmax=ZMAX
     )
     # Update layout with custom text, font sizes, and graph dimensions.
     fig.update_layout(
-        title=dict(text=plot_title, font=dict(size=title_font_size)),
+        title=dict(text=PLOT_TITLE, font=dict(size=TITLE_FONT_SIZE)),
         xaxis=dict(
-            title=dict(text=x_axis_label, font=dict(size=axis_title_font_size)),
-            tickfont=dict(size=x_tick_font_size)
+            title=dict(text=X_AXIS_LABEL, font=dict(size=AXIS_TITLE_FONT_SIZE)),
+            tickfont=dict(size=X_TICK_FONT_SIZE)
         ),
         yaxis=dict(
-            title=dict(text=y_axis_label, font=dict(size=axis_title_font_size)),
-            tickfont=dict(size=y_tick_font_size)
+            title=dict(text=Y_AXIS_LABEL, font=dict(size=AXIS_TITLE_FONT_SIZE)),
+            tickfont=dict(size=Y_TICK_FONT_SIZE)
         ),
-        legend=dict(font=dict(size=legend_font_size)),
-        width=graph_width,
-        height=graph_height
+        legend=dict(font=dict(size=LEGEND_FONT_SIZE)),
+        width=GRAPH_WIDTH,
+        height=GRAPH_HEIGHT
     )
+    apply_plotly_style(fig)
 
-    return (
-        [dcc.Graph(figure=fig)],
-        bulk_melt.to_json(date_format='iso', orient='split'),
-        raw_data.to_json(date_format='iso', orient='split')
-    )
+    fig.show()
+    return fig
 
-# Callback to download selected points (unprocessed data)
-@app.callback(
-    Output("download-dataframe", "data"),
-    Input("download-btn", "n_clicks"),
-    State("umap-data", "data"),
-    State("raw-data", "data"),
-    prevent_initial_call=True
-)
-def download_selected_points(n_clicks, bulk_data, raw_data):
-    """
-    When the user clicks 'Download Selected Points', this returns the entire raw data as a CSV.
-    """
-    raw_df = pd.read_json(raw_data, orient='split')
-    return dcc.send_data_frame(
-        raw_df.to_csv,
-        filename="selected_points.csv",
-        sep='\t'
-    )
 
-# Run the app
-if __name__ == '__main__':
-    app.run_server(debug=True)
+if __name__ == "__main__":
+    build_heatmap()

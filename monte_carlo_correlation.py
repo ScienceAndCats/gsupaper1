@@ -1,11 +1,31 @@
+"""Estimate gene-gene correlation enrichment with a Monte Carlo shuffle test."""
+
+import os
 import scanpy as sc
 import numpy as np
 import matplotlib.pyplot as plt
 
+# ----------------------------------
+# USER SETTINGS (edit in PyCharm)
+# ----------------------------------
+DATA_DIR = "processed_data"
+DATA_FILE = "luz19-20min/luz19-20min_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
+FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
+
+# Matplotlib formatting
+MPL_DPI = 120
+MPL_FONT_SIZE = 11
+MPL_FIGSIZE = (7, 5)
+
+plt.rcParams.update({
+    "figure.dpi": MPL_DPI,
+    "font.size": MPL_FONT_SIZE,
+})
+
 # ---------------------------
 # Step 1: Load and Prepare Data
 # ---------------------------
-adata = sc.read_csv("working_data/preprocessed_PETRI_outputs/17Sep24_Luz19_20min_10000/17Sep24_mixed_species_gene_matrix_preprocessed.txt", delimiter="\t")
+adata = sc.read_csv(FILE_PATH, delimiter="\t")
 
 # Convert sparse matrix to dense if necessary
 if hasattr(adata.X, "toarray"):
@@ -53,6 +73,7 @@ for _ in range(n_sim):
 # ---------------------------
 # Step 4: Visualize and Assess the Result
 # ---------------------------
+plt.figure(figsize=MPL_FIGSIZE)
 plt.hist(simulated_means, bins=30, color='black', edgecolor='black')
 plt.axvline(mean_corr_real, color='red', linestyle='dashed', linewidth=2, label='Observed Mean')
 plt.xlabel("Mean pairwise gene correlation")

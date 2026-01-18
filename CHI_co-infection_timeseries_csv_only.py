@@ -1,3 +1,6 @@
+"""Compute chi-square co-infection stats by timepoint and save the results table."""
+
+import os
 import scanpy as sc
 import numpy as np
 from scipy import sparse
@@ -5,6 +8,25 @@ import matplotlib.pyplot as plt
 from scipy.stats import chisquare
 import pandas as pd
 import plotly.graph_objects as go
+
+# ----------------------------------
+# USER SETTINGS (edit in PyCharm)
+# ----------------------------------
+DATA_DIR = "processed_data"
+DATA_FILE = "13Nov24_RT_multi_infection_gene_matrix.txt"
+FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
+
+# Plot formatting (used if you add plots later)
+MPL_DPI = 120
+MPL_FONT_SIZE = 11
+PLOTLY_TEMPLATE = "plotly_white"
+PLOTLY_FONT_FAMILY = "Arial"
+PLOTLY_FONT_SIZE = 12
+
+plt.rcParams.update({
+    "figure.dpi": MPL_DPI,
+    "font.size": MPL_FONT_SIZE,
+})
 
 # Function to classify cells into timepoints
 def classify_cell(cell_name):
@@ -19,8 +41,7 @@ def classify_cell(cell_name):
         return "20min"
 
 # Load data
-file_path = "working_data/Unprocessed_data/13Nov2024RTmultiinfection/13Nov24_RT_multi_infection_gene_matrix.txt"
-adata = sc.read(file_path, delimiter="\t")
+adata = sc.read(FILE_PATH, delimiter="\t")
 
 # Remove genes with commas in their names
 adata = adata[:, ~adata.var_names.str.contains(",")]
