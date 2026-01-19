@@ -13,10 +13,18 @@ DATA_DIR = "processed_data"
 DATA_FILE = "luz19timeseries/luz19timeseries_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
 FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 
+# Gene order file (must sit in the same directory as this script)
+GENE_ORDER_FILE = "heatmap_genes.txt"
+
+# Output settings
+OUTPUT_DIR = "graph_outputs"
+OUTPUT_PNG = "luz19_gene_expression_heatmap.png"
+
 # Plotly formatting
 PLOTLY_TEMPLATE = "plotly_white"
 PLOTLY_FONT_FAMILY = "Arial"
-PLOTLY_FONT_SIZE = 12
+PLOTLY_FONT_SIZE = 8
+
 
 def apply_plotly_style(fig):
     fig.update_layout(
@@ -25,11 +33,10 @@ def apply_plotly_style(fig):
     )
     return fig
 
+
 # Notes:
 # - Displays mean expression for luz19 genes by timepoint.
 # - Expected input is a tab-delimited gene expression matrix in processed_data.
-
-
 
 
 # ----------------------------------
@@ -47,9 +54,16 @@ LEGEND_FONT_SIZE = 12
 PLOT_TITLE = "Heatmap of 'luz19' Gene Expression Across Timepoints"
 X_AXIS_LABEL = "Timepoint"
 Y_AXIS_LABEL = "Gene"
-GENE_ORDER = ""
 GRAPH_WIDTH = 800
 GRAPH_HEIGHT = 600
+
+
+def load_gene_order(file_path: str):
+    """Load gene order from a comma-separated text file."""
+    with open(file_path, "r") as f:
+        line = f.read().strip()
+    return [g.strip() for g in line.split(",") if g.strip()]
+
 
 # Load and preprocess the dataset
 def load_and_preprocess_data(file_name, min_counts_cells=4, min_counts_genes=4):
@@ -87,13 +101,14 @@ def load_and_preprocess_data(file_name, min_counts_cells=4, min_counts_genes=4):
         elif bc1_value < 49:
             return "10min"
         elif bc1_value < 73:
-            return ">30min" # modified so that 30 and 40min lumped together
+            return ">30min"  # modified so that 30 and 40min lumped together
         else:
-            return ">30min"   # modified so that 30 and 40min lumped together
+            return ">30min"  # modified so that 30 and 40min lumped together
 
     adata.obs['cell_group'] = adata.obs_names.map(classify_cell)
 
     return adata, raw_data_copy
+
 
 # Create Bulk DataFrame by aggregating single-cell data for genes with "luz19"
 def create_bulk_df(adata):
@@ -104,21 +119,14 @@ def create_bulk_df(adata):
     expr_df = expr_df[luz19_cols]
     # Add cell group information
     expr_df['cell_group'] = adata.obs['cell_group']
-    # Group cells by their cell_group and sum the expression (i.e. create a "bulk" sample)
-    #bulk_df = expr_df.groupby('cell_group').sum().reset_index()
-    bulk_df = expr_df.groupby('cell_group').mean().reset_index() #taking the mean instead of sum
+    # Group cells by their cell_group and take the mean expression (bulk sample)
+    bulk_df = expr_df.groupby('cell_group').mean().reset_index()
 
     # Melt the DataFrame to long format for Plotly
     bulk_melt = bulk_df.melt(id_vars='cell_group', var_name='gene', value_name='expression')
     # Remove any genes that have a comma in their name, these are multi-hits
     bulk_melt = bulk_melt[~bulk_melt['gene'].str.contains(",")]
     return bulk_melt
-
-
-
-
-
-
 
 
 def build_heatmap():
@@ -129,6 +137,7 @@ def build_heatmap():
 
     # Pivot the data so that rows = genes and columns = timepoints (cell_group)
     heat_df = bulk_melt.pivot(index='gene', columns='cell_group', values='expression')
+
     # Ensure the columns appear in the desired order:
     expected_order = ['Preinfection', '10min', '>30min']
     columns_order = [col for col in expected_order if col in heat_df.columns]
@@ -137,27 +146,39 @@ def build_heatmap():
     # Remove "luz19:" prefix from gene names for display.
     heat_df.index = heat_df.index.str.replace("luz19:", "", regex=False)
 
-    # If a custom gene order is provided, reorder the rows accordingly.
-    if GENE_ORDER and GENE_ORDER.strip():
-        # Parse the comma-separated gene names
-        gene_order_list = [gene.strip() for gene in GENE_ORDER.split(',') if gene.strip()]
-        # Only use genes that exist in the current DataFrame.
-        new_order = [gene for gene in gene_order_list if gene in heat_df.index]
-        # Append any genes not mentioned.
-        # remaining_genes = [gene for gene in heat_df.index if gene not in new_order]  # took this out, I don't want to display genes I don't specify
-        # new_order.extend(remaining_genes) # took this out, I don't want to display genes I don't specify
-        heat_df = heat_df.loc[new_order]
+    # Load gene order from file located in the same directory as this script
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+    gene_order_path = os.path.join(base_dir, GENE_ORDER_FILE)
+    gene_order_list = load_gene_order(gene_order_path)
 
-    # Create heatmap using px.imshow.
+    # Apply ordering and drop genes not listed
+    ordered_genes = [g for g in gene_order_list if g in heat_df.index]
+    heat_df = heat_df.loc[ordered_genes]
+
+    # Print the genes that are actually plotted
+    print("\nGenes plotted in heatmap:")
+    print(", ".join(heat_df.index.tolist()))
+
+    # Rotate heatmap 90 degrees clockwise:
+    # transpose + reverse rows
+    rotated_df = heat_df.T.iloc[::-1]
+
     fig = px.imshow(
-        heat_df,
-        labels=dict(x=X_AXIS_LABEL, y=Y_AXIS_LABEL, color="Expression"),
-        x=columns_order,
-        y=heat_df.index,
+        rotated_df,
+        labels=dict(x=Y_AXIS_LABEL, y=X_AXIS_LABEL, color="Expression"),
+        x=rotated_df.columns,
+        y=rotated_df.index,
         aspect="auto",
         zmin=ZMIN,
         zmax=ZMAX
     )
+    fig.update_xaxes(
+        tickangle=90,
+        tickmode="array",
+        tickvals=list(rotated_df.columns),
+        ticktext=list(rotated_df.columns),
+    )
+
     # Update layout with custom text, font sizes, and graph dimensions.
     fig.update_layout(
         title=dict(text=PLOT_TITLE, font=dict(size=TITLE_FONT_SIZE)),
@@ -174,6 +195,12 @@ def build_heatmap():
         height=GRAPH_HEIGHT
     )
     apply_plotly_style(fig)
+
+    # Ensure output directory exists and save PNG
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    output_path = os.path.join(OUTPUT_DIR, OUTPUT_PNG)
+    fig.write_image(output_path, scale=2)
+    print(f"\nHeatmap saved to: {output_path}")
 
     fig.show()
     return fig
