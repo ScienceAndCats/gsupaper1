@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # USER SETTINGS (edit in PyCharm)
 # ----------------------------------
 DATA_DIR = "processed_data"
-DATA_FILE = "luz19-20min/luz19-20min_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
+DATA_FILE = "luz19timeseries/luz19timeseries_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
 FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 
 # Matplotlib formatting
