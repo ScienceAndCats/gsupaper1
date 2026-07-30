@@ -50,22 +50,22 @@ OUTPUT_DIR = "qc_outputs"
 #   e.g. "... bc1_10 ...   ATACAAT   PA01:PA0525   102"
 DATASETS = [
     {
-        "name": "JRG07-Sample-P",
+        "name": "JRG07- PAO1, uninfected",
         "gene_matrix_path": "processed_data/JRG07-Sample-P/JRG07-Sample-P_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt",
         "filtered_umis_path": "processed_data/JRG07-Sample-P/JRG07-Sample-P_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     {
-        "name": "JRG09-UI",
+        "name": "JRG09- PA01, uninfected, rRNA depleted",
         "gene_matrix_path": "processed_data/JRG09-UI/JRG09-UI_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt",
         "filtered_umis_path": "processed_data/JRG09-UI/JRG09-UI_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     {
-        "name": "luz19timeseries",
+        "name": "JRG06- Luz19 infection",
         "gene_matrix_path": "processed_data/luz19timeseries/luz19timeseries_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt",
         "filtered_umis_path": "processed_data/luz19timeseries/luz19timeseries_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     {
-        "name": "JRG07-Sample-P3",
+        "name": "JRG07b- Luz19/LKD16 coinfection",
         "gene_matrix_path": "processed_data/JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix.txt",
         "filtered_umis_path": "processed_data/JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },

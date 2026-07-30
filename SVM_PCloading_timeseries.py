@@ -51,7 +51,7 @@ STYLE = {
     "font_size": 12,
 
     # UMAP
-    "umap_marker_size": 3,
+    "umap_marker_size": 12,
     "umap_width": 1000,
     "umap_height": 1000,
 
@@ -115,7 +115,7 @@ def save_fig(fig, base_name: str):
 MIN_COUNTS_CELLS = 5
 MIN_COUNTS_GENES = 5
 N_NEIGHBORS = 60
-MIN_DIST = 0.1
+MIN_DIST = 0.3
 N_PCS = 12
 
 TEST_SIZE = 0.25          # 25% holdout for test

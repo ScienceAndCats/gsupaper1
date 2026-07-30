@@ -54,6 +54,9 @@ TARGET_SUM = 1e4
 # Timepoints (order matters)
 TIMEPOINT_ORDER = ["5min", "10min", "15min", "20min"]
 
+# Timepoints used *for heatmaps* (subset or re-ordering of TIMEPOINT_ORDER)
+HEATMAP_TIMEPOINTS = ["15min", "20min"]  #["5min", "10min", "15min", "20min"]
+
 # Phage gene prefixes
 PHAGE_PREFIXES = ["luz19:", "lkd16:"]
 
@@ -382,16 +385,38 @@ def compute_tp_matrices_and_tables(adata: sc.AnnData, genes: list[str]):
 # =============================================================================
 # PLOTTING HEATMAPS
 # =============================================================================
-def plot_heatmaps(genes_present, mats_by_tp, title_prefix, cmap_name, figsize, share_scale, out_prefix,
-                  annotate=False, annotate_fmt="{:.2f}", annotate_fontsize=8, annotate_max_genes=60):
+def plot_heatmaps(
+    genes_present,
+    mats_by_tp,
+    title_prefix,
+    cmap_name,
+    figsize,
+    share_scale,
+    out_prefix,
+    annotate=False,
+    annotate_fmt="{:.2f}",
+    annotate_fontsize=8,
+    annotate_max_genes=60,
+    timepoints=None,   # NEW
+):
     conds = ["Uninfected", "Single infection", "Coinfected"]
+
+    # Decide which timepoints to actually plot
+    if timepoints is None:
+        timepoints = TIMEPOINT_ORDER
 
     vmin_global = vmax_global = None
     if share_scale:
-        flat = np.concatenate([m.ravel() for m in mats_by_tp.values()])
-        valid = flat[~np.isnan(flat)]
-        if valid.size > 0:
-            vmin_global, vmax_global = float(valid.min()), float(valid.max())
+        # Only use selected timepoints for global vmin/vmax
+        all_vals = []
+        for tp in timepoints:
+            if tp in mats_by_tp:
+                all_vals.append(mats_by_tp[tp].ravel())
+        if all_vals:
+            flat = np.concatenate(all_vals)
+            valid = flat[~np.isnan(flat)]
+            if valid.size > 0:
+                vmin_global, vmax_global = float(valid.min()), float(valid.max())
 
     base_cmap = plt.cm.get_cmap(cmap_name or "viridis")
     cmap = copy(base_cmap)
@@ -399,7 +424,7 @@ def plot_heatmaps(genes_present, mats_by_tp, title_prefix, cmap_name, figsize, s
 
     do_annotate = annotate and (len(genes_present) <= annotate_max_genes)
 
-    for tp in TIMEPOINT_ORDER:
+    for tp in timepoints:
         if tp not in mats_by_tp:
             print(f"No cells at {tp}; skipping {out_prefix} heatmap.")
             continue
@@ -799,8 +824,6 @@ def plot_total_counts_by_group(adata: sc.AnnData):
         save_png(fig, f"total_counts_raw_boxplot_{tp}")
 
 
-
-
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -827,6 +850,7 @@ def main():
         share_scale=STYLE["mean_heatmap_share_color_scale"],
         out_prefix="mean_expr",
         annotate=False,
+        timepoints=HEATMAP_TIMEPOINTS,
     )
 
     # Hits-per-cell heatmaps (raw)
@@ -843,6 +867,7 @@ def main():
             annotate_fmt=STYLE.get("annotate_fmt", "{:.2f}"),
             annotate_fontsize=STYLE.get("annotate_fontsize", 8),
             annotate_max_genes=STYLE.get("annotate_max_genes", 60),
+            timepoints=HEATMAP_TIMEPOINTS,
         )
 
     # Tables
@@ -857,7 +882,6 @@ def main():
 
     # QC: total raw counts per cell by infection state & timepoint
     plot_total_counts_by_group(adata)
-
 
 
 if __name__ == "__main__":

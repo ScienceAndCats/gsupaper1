@@ -13,7 +13,8 @@ import plotly.graph_objects as go
 # USER SETTINGS (edit in PyCharm)
 # ----------------------------------
 DATA_DIR = "processed_data"
-DATA_FILE = "JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix.txt"
+# DATA_FILE = "JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
+DATA_FILE = "JRG09-3PMP20/JRG09-3PMP20_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
 FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 
 # Plot formatting (used if you add plots later)
@@ -111,6 +112,43 @@ adata.obs["phage_presence"] = (
     (adata.obs["luz19_expression"] > 0).astype(int) * 1 +
     (adata.obs["lkd16_expression"] > 0).astype(int) * 2
 )
+
+
+# -------------------------------------------------
+# Export list of cells with BOTH luz19 and lkd16
+# including number of gene hits per phage
+# -------------------------------------------------
+
+# Boolean masks for phage genes (already defined earlier)
+luz_mask = adata.var["luz19_genes"]
+lkd_mask = adata.var["lkd16_genes"]
+
+# Subset to co-infected cells
+coinfected = adata.obs["phage_presence"] == 3
+adata_coinf = adata[coinfected]
+
+# Count hits per cell
+if sparse.issparse(adata_coinf.X):
+    luz_hits = adata_coinf[:, luz_mask].X.sum(axis=1).A.flatten()
+    lkd_hits = adata_coinf[:, lkd_mask].X.sum(axis=1).A.flatten()
+else:
+    luz_hits = adata_coinf[:, luz_mask].X.sum(axis=1)
+    lkd_hits = adata_coinf[:, lkd_mask].X.sum(axis=1)
+
+# Write output
+with open("luz19_lkd16_coinfected_cells.txt", "w") as f:
+    f.write("cell_id\tluz19_hits\tlkd16_hits\n")
+    for cell, l_hits, k_hits in zip(
+        adata_coinf.obs_names, luz_hits, lkd_hits
+    ):
+        f.write(f"{cell}\t{int(l_hits)}\t{int(k_hits)}\n")
+
+print(
+    f"Saved {adata_coinf.n_obs} co-infected cells with hit counts "
+    f"to luz19_lkd16_coinfected_cells.txt"
+)
+
+
 
 # Define timepoints and categories
 timepoints = ["5min", "10min", "15min", "20min"]
@@ -235,4 +273,16 @@ if LINE_PLOT_STYLE["ylim"] is not None:
     plt.ylim(LINE_PLOT_STYLE["ylim"])
 
 plt.tight_layout()
+
+# Save line plot as PNG
+os.makedirs("graph_outputs", exist_ok=True)
+plt.savefig(
+    os.path.join("graph_outputs", "chi_square_differences_lineplot.png"),
+    dpi=MPL_DPI,
+    bbox_inches="tight"
+)
+
+
+print("before show")
 plt.show()
+print("after show")
