@@ -48,29 +48,40 @@ OUTPUT_DIR = "qc_outputs"
 # Example UMI file format is the one you attached:
 #   Cell Barcode, UMI, contig:gene, total_reads (tab-separated)
 #   e.g. "... bc1_10 ...   ATACAAT   PA01:PA0525   102"
+
+
+
 DATASETS = [
     {
-        "name": "JRG07- PAO1, uninfected",
+        "name": "JRG07-\nPAO1, uninfected",
         "gene_matrix_path": "processed_data/JRG07-Sample-P/JRG07-Sample-P_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt",
         "filtered_umis_path": "processed_data/JRG07-Sample-P/JRG07-Sample-P_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     {
-        "name": "JRG09- PA01, uninfected, rRNA depleted",
+        "name": "JRG09-\nPA01, uninfected, rRNA depleted",
         "gene_matrix_path": "processed_data/JRG09-UI/JRG09-UI_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt",
         "filtered_umis_path": "processed_data/JRG09-UI/JRG09-UI_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     {
-        "name": "JRG06- Luz19 infection",
+        "name": "JRG06-\nLuz19 infection",
         "gene_matrix_path": "processed_data/luz19timeseries/luz19timeseries_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt",
         "filtered_umis_path": "processed_data/luz19timeseries/luz19timeseries_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     {
-        "name": "JRG07b- Luz19/LKD16 coinfection",
+        "name": "JRG07b-\nLuz19/LKD16 coinfection",
         "gene_matrix_path": "processed_data/JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix.txt",
         "filtered_umis_path": "processed_data/JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_filtered_mapped_UMIs_multihitcombo.txt",
     },
     # Add up to 5 more:
     # {"name": "dataset2", "gene_matrix_path": "...", "filtered_umis_path": "..."},
+]
+
+# Match colors between datasets
+DATASET_COLORS = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
 ]
 
 # Stratification toggles (DEFAULT OFF)
@@ -452,8 +463,17 @@ def compute_saturation_curve(per_umi_df: pd.DataFrame, dataset_name: str, max_de
 # =============================================================================
 def violin_by_dataset(ax, data_by_dataset: List[np.ndarray], labels: List[str], ylabel: str, title: str, logy: bool):
     parts = ax.violinplot(data_by_dataset, showmeans=False, showmedians=True, showextrema=True)
+
+    for body, color in zip(parts["bodies"], DATASET_COLORS):
+        body.set_facecolor(color)
+        body.set_edgecolor("black")
+        body.set_alpha(0.8)
+    parts["cmedians"].set_color("black")
+    parts["cbars"].set_color("black")
+    parts["cmins"].set_color("black")
+    parts["cmaxes"].set_color("black")
     ax.set_xticks(np.arange(1, len(labels) + 1))
-    ax.set_xticklabels(labels, rotation=20, ha="right")
+    ax.set_xticklabels(labels, rotation=0, ha="center")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     if logy:
@@ -461,8 +481,24 @@ def violin_by_dataset(ax, data_by_dataset: List[np.ndarray], labels: List[str], 
 
 
 def box_by_dataset(ax, data_by_dataset: List[np.ndarray], labels: List[str], ylabel: str, title: str, logy: bool):
-    ax.boxplot(data_by_dataset, labels=labels, showfliers=True)
-    ax.set_xticklabels(labels, rotation=20, ha="right")
+    #ax.boxplot(data_by_dataset, labels=labels, showfliers=True)
+    ax.boxplot(
+        data_by_dataset,
+        labels=labels,
+        showfliers=True,
+        patch_artist=True,
+        boxprops=dict(facecolor="white", edgecolor="black"),
+        medianprops=dict(color="black"),
+        whiskerprops=dict(color="black"),
+        capprops=dict(color="black"),
+        flierprops=dict(
+            marker='o',
+            markerfacecolor='black',
+            markeredgecolor='black',
+            markersize=3
+        )
+    )
+    ax.set_xticklabels(labels, rotation=0, ha="center")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     if logy:
@@ -587,13 +623,29 @@ def plot_saturation_curves(curves: pd.DataFrame):
     fig = plt.figure(figsize=STYLE["figsize_satcurve"])
     ax = fig.add_subplot(111)
 
-    for ds, sub in curves.groupby("dataset"):
-        ax.plot(sub["depth"].values, sub["expected_umis_mean"].values, marker="o", linewidth=1.5, label=ds)
+    # Plot in DATASETS order so colors match the violin plots exactly.
+    for i, dataset in enumerate(DATASETS):
+        ds = dataset["name"]
+        sub = curves[curves["dataset"] == ds]
+        if sub.empty:
+            continue
+        ax.plot(
+            sub["depth"].values,
+            sub["expected_umis_mean"].values,
+            marker="o",
+            linewidth=1.5,
+            label=ds,
+            color=DATASET_COLORS[i],
+        )
 
     ax.set_xlabel("Reads sampled (per cell)")
     ax.set_ylabel("Expected UMIs observed (mean across sampled cells)")
     ax.set_title("Library complexity / saturation curve")
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(
+        frameon=False,
+        fontsize=9,
+        labelspacing=1.2
+    )
 
     if STYLE["tight_layout"]:
         fig.tight_layout()
