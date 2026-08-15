@@ -26,7 +26,33 @@ PLOTLY_FONT_SIZE = 12
 def apply_plotly_style(fig):
     fig.update_layout(
         template=PLOTLY_TEMPLATE,
-        font=dict(family=PLOTLY_FONT_FAMILY, size=PLOTLY_FONT_SIZE),
+
+        # Default font for the figure
+        font=dict(
+            family=PLOTLY_FONT_FAMILY,
+            size=PLOTLY_FONT_SIZE
+        ),
+
+        # Main plot title
+        title=dict(
+            font=dict(size=34)
+        ),
+
+        # Legend text and legend title
+        legend=dict(
+            font=dict(size=25),
+            title_font=dict(size=25)
+        ),
+
+        # Axis title and tick-label sizes
+        xaxis=dict(
+            title_font=dict(size=27),
+            tickfont=dict(size=16)
+        ),
+        yaxis=dict(
+            title_font=dict(size=27),
+            tickfont=dict(size=16)
+        )
     )
     return fig
 
@@ -128,9 +154,10 @@ def run_umap():
         hover_data=["cell_name", "leiden", "cell_group"],
         color_discrete_map=color_map,
         category_orders={"cell_group": LEGEND_ORDER},
+        labels={"cell_group": "Time group"},
         width=GRAPH_WIDTH,
         height=GRAPH_HEIGHT,
-        title="UMAP by Time Group",
+        title="UMAP, Time Post Infection",
     )
 
     fig.update_traces(marker=dict(size=UMAP_MARKER_SIZE, opacity=0.8))

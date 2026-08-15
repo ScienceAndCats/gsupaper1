@@ -45,17 +45,17 @@ def apply_plotly_style(fig):
 MIN_COUNTS_CELLS = 4
 MIN_COUNTS_GENES = 4
 ZMIN = 0
-ZMAX = 1
+ZMAX = 0.7
 TITLE_FONT_SIZE = 20
 AXIS_TITLE_FONT_SIZE = 14
 X_TICK_FONT_SIZE = 12
 Y_TICK_FONT_SIZE = 12
 LEGEND_FONT_SIZE = 12
-PLOT_TITLE = "Heatmap of 'luz19' Gene Expression Across Timepoints"
-X_AXIS_LABEL = "Timepoint"
-Y_AXIS_LABEL = "Gene"
+PLOT_TITLE = "Heatmap of 'Luz19' Gene Expression Across Timepoints"
+X_AXIS_LABEL = "Gene"
+Y_AXIS_LABEL = "Timepoint"
 GRAPH_WIDTH = 800
-GRAPH_HEIGHT = 600
+GRAPH_HEIGHT = 400
 
 
 def load_gene_order(file_path: str):
@@ -139,7 +139,8 @@ def build_heatmap():
     heat_df = bulk_melt.pivot(index='gene', columns='cell_group', values='expression')
 
     # Ensure the columns appear in the desired order:
-    expected_order = ['Preinfection', '10min', '>30min']
+    #expected_order = ['Preinfection', '10min', '>30min']
+    expected_order = ['>30min', '10min', 'Preinfection']
     columns_order = [col for col in expected_order if col in heat_df.columns]
     heat_df = heat_df[columns_order]
 

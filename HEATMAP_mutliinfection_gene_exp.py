@@ -4,8 +4,8 @@ plus raw-support tables (n_cells, raw hits, mean hits/cell),
 PLUS statistical tests: coinfected vs single-infected (per phage, per timepoint).
 
 What gets tested:
-- For luz19 genes: Coinfected vs Only luz19
-- For lkd16 genes: Coinfected vs Only lkd16
+- For luz19 genes: Coinfected vs Only Luz19
+- For lkd16 genes: Coinfected vs Only LKD16
 
 Tests:
 - Mann–Whitney U on per-cell expression values (default uses normalized log1p in adata.X)
@@ -13,6 +13,9 @@ Tests:
 - Benjamini–Hochberg FDR correction across genes
 
 Outputs (in graph_outputs/):
+- heatmap_genes_displayed.txt
+- heatmap_gene_name_mapping.tsv
+- heatmap_genes_missing_from_matrix.txt (only when requested genes are absent)
 - gene_support_table_<tp>.csv
 - n_cells_<tp>.csv
 - coinfection_gene_tests_<tp>_<phage>.csv
@@ -44,8 +47,8 @@ FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 GRAPH_OUTPUT_DIR = "graph_outputs"
 
 # Filtering
-MIN_COUNTS_CELLS = 5
-MIN_COUNTS_GENES = 5
+MIN_COUNTS_CELLS = 4
+MIN_COUNTS_GENES = 4
 
 # Normalization
 DO_NORMALIZE = True     # normalize_total + log1p
@@ -57,11 +60,21 @@ TIMEPOINT_ORDER = ["5min", "10min", "15min", "20min"]
 # Timepoints used *for heatmaps* (subset or re-ordering of TIMEPOINT_ORDER)
 HEATMAP_TIMEPOINTS = ["15min", "20min"]  #["5min", "10min", "15min", "20min"]
 
-# Phage gene prefixes
+# Phage gene prefixes used when no custom gene list is supplied
 PHAGE_PREFIXES = ["luz19:", "lkd16:"]
 
-# Gene selection: top variable genes per timepoint, then union across timepoints
-TOP_N_VAR_GENES = 50
+# Optional text file containing genes to display, one gene per line.
+# The heatmaps will follow this exact order. Blank lines and lines beginning
+# with # are ignored. Set to None or "" to display every Luz19/LKD16 gene.
+# Examples:
+GENE_DISPLAY_FILE = "heatmap_genes_displayed_sorted.txt"
+# GENE_DISPLAY_FILE = os.path.join(DATA_DIR, "heatmap_gene_order.txt")
+#GENE_DISPLAY_FILE = None
+
+# Heatmap dimensions are calculated from the number of displayed genes.
+HEATMAP_WIDTH = 10
+HEATMAP_HEIGHT_PER_GENE = 0.22
+HEATMAP_MIN_HEIGHT = 6
 
 # Threshold for calling "phage present" (phage_expression > threshold)
 PHAGE_PRESENT_THRESHOLD = 0.0
@@ -76,15 +89,35 @@ STYLE = {
     "font_size": 11,
 
     # Mean-expression heatmap (normalized/log1p mean if DO_NORMALIZE)
-    "mean_heatmap_figsize": (10, 0.22 * TOP_N_VAR_GENES + 4),
     "mean_heatmap_cmap": "viridis",
     "mean_heatmap_share_color_scale": True,
+    "mean_title": "Mean expression heatmap at {timepoint}",
+    "mean_xlabel": "", #"Infection state"
+    "mean_ylabel": "Gene",
+    "mean_colorbar_label": "Mean normalized log1p expression",
+    "mean_title_fontsize": 32,
+    "mean_xlabel_fontsize": 24,
+    "mean_ylabel_fontsize": 24,
+    "mean_xtick_fontsize": 16,
+    "mean_ytick_fontsize": 12,
+    "mean_colorbar_label_fontsize": 18,
+    "mean_colorbar_tick_fontsize": 14,
 
     # Mean-hits-per-cell heatmap (raw counts / n_cells)
     "make_hits_per_cell_heatmaps": True,
-    "hits_per_cell_figsize": (10, 0.22 * TOP_N_VAR_GENES + 4),
     "hits_per_cell_cmap": "magma",
     "hits_per_cell_share_color_scale": True,
+    "hits_title": "Mean hits/cell (raw) heatmap at {timepoint}",
+    "hits_xlabel": "Infection state",
+    "hits_ylabel": "Gene",
+    "hits_colorbar_label": "Mean raw hits per cell",
+    "hits_title_fontsize": 14,
+    "hits_xlabel_fontsize": 12,
+    "hits_ylabel_fontsize": 12,
+    "hits_xtick_fontsize": 10,
+    "hits_ytick_fontsize": 9,
+    "hits_colorbar_label_fontsize": 11,
+    "hits_colorbar_tick_fontsize": 9,
 
     # Annotate numbers on hits-per-cell heatmap blocks
     "annotate_hits_per_cell": True,
@@ -92,11 +125,15 @@ STYLE = {
     "annotate_fontsize": 8,
     "annotate_max_genes": 60,
 
-    # Labels
-    "xlabel": "Infection state",
-    "ylabel": "Gene",
-    "title_mean_prefix": "Mean expression heatmap at ",
-    "title_hits_prefix": "Mean hits/cell (raw) heatmap at ",
+    # Total-count QC boxplots
+    "total_counts_title": "Total raw counts per cell by infection state ({timepoint})",
+    "total_counts_xlabel": "Infection state",
+    "total_counts_ylabel": "Total raw counts per cell",
+    "total_counts_title_fontsize": 14,
+    "total_counts_xlabel_fontsize": 12,
+    "total_counts_ylabel_fontsize": 12,
+    "total_counts_xtick_fontsize": 10,
+    "total_counts_ytick_fontsize": 10,
 
     # Save options
     "png_dpi": 220,
@@ -181,25 +218,193 @@ def load_gene_matrix_to_adata(path: str) -> sc.AnnData:
     return sc.AnnData(raw)
 
 
-def pick_genes_union_high_variance_per_timepoint(adata: sc.AnnData, n_per_tp: int) -> list[str]:
-    genes_union = set()
+def is_phage_gene(gene: str) -> bool:
+    """Return True when a gene name begins with a configured phage prefix."""
+    gene_lower = str(gene).lower()
+    return any(gene_lower.startswith(prefix.lower()) for prefix in PHAGE_PREFIXES)
 
-    for tp in TIMEPOINT_ORDER:
-        ad_tp = adata[adata.obs["timepoint"] == tp]
-        if ad_tp.n_obs == 0:
-            print(f"WARNING: No cells at {tp}; skipping variance selection for that timepoint.")
-            continue
 
-        X_tp = to_dense_if_needed(ad_tp.X)
-        var_tp = X_tp.var(axis=0)
+def format_gene_display_name(gene: str) -> str:
+    """Return a cleaner label without changing the underlying matrix gene ID.
 
-        n = min(n_per_tp, ad_tp.n_vars)
-        top_idx = np.argsort(var_tp)[::-1][:n]
-        genes_union.update(list(ad_tp.var_names[top_idx]))
+    Examples
+    --------
+    lkd16:PPLKD16_gp01 -> LKD16:gp01
+    luz19:gp23         -> Luz19:gp23
 
-    genes_list = sorted(list(genes_union))
-    print(f"Selected {len(genes_list)} genes (union of top-{n_per_tp} variance per timepoint).")
-    return genes_list
+    Repeated annotation prefixes are also removed, for example:
+    luz19:PPLUZ19_PPLUZ19_gp20 -> Luz19:gp20
+    """
+    gene = str(gene)
+    if ":" not in gene:
+        return gene
+
+    prefix, suffix = gene.split(":", 1)
+    prefix_lower = prefix.lower()
+
+    if prefix_lower == "lkd16":
+        suffix = re.sub(r"^(?:PPLKD16_)+", "", suffix, flags=re.IGNORECASE)
+        return f"LKD16:{suffix}"
+
+    if prefix_lower == "luz19":
+        suffix = re.sub(r"^(?:PPLUZ19_)+", "", suffix, flags=re.IGNORECASE)
+        return f"Luz19:{suffix}"
+
+    return gene
+
+
+def read_requested_gene_list(path: str) -> list[str]:
+    """Read one gene per line while preserving order and removing duplicates."""
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Gene display file not found: {path}")
+
+    genes = []
+    seen = set()
+    with open(path, "r", encoding="utf-8-sig") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            gene = line.strip()
+            if not gene or gene.startswith("#"):
+                continue
+            if gene in seen:
+                print(
+                    f"WARNING: Duplicate gene '{gene}' on line {line_number} "
+                    "was ignored; the first occurrence determines its position."
+                )
+                continue
+            genes.append(gene)
+            seen.add(gene)
+
+    if not genes:
+        raise ValueError(f"No gene names were found in gene display file: {path}")
+    return genes
+
+
+def resolve_gene_name(
+    requested: str,
+    exact_names: set[str],
+    lower_to_actual: dict[str, list[str]],
+    display_to_actual: dict[str, list[str]],
+):
+    """Resolve either a raw matrix ID or its cleaned display-name alias."""
+    if requested in exact_names:
+        return requested
+
+    matches = lower_to_actual.get(requested.lower(), [])
+    match_type = "case-insensitive raw-name comparison"
+
+    if not matches:
+        matches = display_to_actual.get(requested.lower(), [])
+        match_type = "cleaned display-name alias"
+
+    if len(matches) == 1:
+        actual = matches[0]
+        if requested != actual:
+            print(f"Matched requested gene '{requested}' to matrix gene '{actual}' using {match_type}.")
+        return actual
+
+    if len(matches) > 1:
+        print(
+            f"WARNING: Requested gene '{requested}' resolves to multiple matrix genes "
+            f"and was skipped: {matches}"
+        )
+    return None
+
+
+def select_heatmap_genes(adata: sc.AnnData, gene_file: str | None = None) -> tuple[list[str], list[str]]:
+    """
+    Choose genes for both heatmap types.
+
+    If gene_file is supplied, use its order exactly after removing missing genes.
+    Otherwise, use every Luz19/LKD16 gene in the order found in adata.var_names.
+
+    Returns
+    -------
+    displayed_genes, missing_requested_genes
+    """
+    var_names = [str(g) for g in adata.var_names]
+    exact_names = set(var_names)
+    lower_to_actual = {}
+    display_to_actual = {}
+    for gene in var_names:
+        lower_to_actual.setdefault(gene.lower(), []).append(gene)
+        display_name = format_gene_display_name(gene)
+        display_to_actual.setdefault(display_name.lower(), []).append(gene)
+
+    if gene_file:
+        requested = read_requested_gene_list(gene_file)
+        displayed = []
+        missing = []
+        already_added = set()
+
+        for gene in requested:
+            actual = resolve_gene_name(
+                gene, exact_names, lower_to_actual, display_to_actual
+            )
+            if actual is None:
+                missing.append(gene)
+                continue
+            if actual in already_added:
+                print(
+                    f"WARNING: '{gene}' resolves to the already selected gene '{actual}' "
+                    "and was ignored."
+                )
+                continue
+            displayed.append(actual)
+            already_added.add(actual)
+
+        if missing:
+            print(
+                f"WARNING: {len(missing)} requested genes were not found after filtering "
+                "and will not be displayed."
+            )
+        source_description = f"custom list: {gene_file}"
+    else:
+        displayed = [gene for gene in var_names if is_phage_gene(gene)]
+        missing = []
+        source_description = "all Luz19/LKD16 genes in matrix order"
+
+    if not displayed:
+        raise ValueError(
+            "No genes are available for the heatmaps. Either provide valid names in "
+            "GENE_DISPLAY_FILE or confirm that matrix gene names begin with one of "
+            f"these prefixes: {PHAGE_PREFIXES}"
+        )
+
+    print(f"Selected {len(displayed)} heatmap genes from {source_description}.")
+    return displayed, missing
+
+
+def write_displayed_gene_lists(displayed_genes: list[str], missing_genes: list[str]):
+    """Write the final heatmap order and, when applicable, missing requested genes."""
+    ensure_outdir()
+
+    displayed_path = os.path.join(GRAPH_OUTPUT_DIR, "heatmap_genes_displayed.txt")
+    displayed_labels = [format_gene_display_name(gene) for gene in displayed_genes]
+    with open(displayed_path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(displayed_labels) + "\n")
+    print(f"Saved: {displayed_path}")
+
+    mapping_path = os.path.join(GRAPH_OUTPUT_DIR, "heatmap_gene_name_mapping.tsv")
+    pd.DataFrame({
+        "matrix_gene_name": displayed_genes,
+        "display_gene_name": displayed_labels,
+    }).to_csv(mapping_path, sep="\t", index=False)
+    print(f"Saved: {mapping_path}")
+
+    missing_path = os.path.join(GRAPH_OUTPUT_DIR, "heatmap_genes_missing_from_matrix.txt")
+    if missing_genes:
+        with open(missing_path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(missing_genes) + "\n")
+        print(f"Saved: {missing_path}")
+    elif os.path.exists(missing_path):
+        os.remove(missing_path)
+        print(f"Removed stale file: {missing_path}")
+
+
+def heatmap_figsize(n_genes: int) -> tuple[float, float]:
+    """Scale heatmap height to the number of displayed genes."""
+    height = max(HEATMAP_MIN_HEIGHT, HEATMAP_HEIGHT_PER_GENE * n_genes + 4)
+    return HEATMAP_WIDTH, height
 
 
 # NEW: Benjamini–Hochberg FDR
@@ -246,7 +451,51 @@ def setup_adata() -> sc.AnnData:
     print(adata)
 
     sc.pp.filter_cells(adata, min_counts=MIN_COUNTS_CELLS)
-    sc.pp.filter_genes(adata, min_counts=MIN_COUNTS_GENES)
+
+    # Apply the general gene-count filter, but ALWAYS retain:
+    #   1. every Luz19/LKD16 gene, and
+    #   2. every gene requested in GENE_DISPLAY_FILE.
+    # This ensures "all phage genes" really means all phage genes present in
+    # the input matrix, including genes with fewer than MIN_COUNTS_GENES hits.
+    X_for_filter = adata.X
+    if sparse.issparse(X_for_filter):
+        total_gene_counts = np.asarray(X_for_filter.sum(axis=0)).ravel()
+    else:
+        total_gene_counts = np.asarray(X_for_filter.sum(axis=0)).ravel()
+
+    keep_gene_mask = total_gene_counts >= MIN_COUNTS_GENES
+    phage_gene_mask = np.asarray([is_phage_gene(gene) for gene in adata.var_names])
+    keep_gene_mask = keep_gene_mask | phage_gene_mask
+
+    if GENE_DISPLAY_FILE:
+        requested_for_retention = {
+            gene.lower() for gene in read_requested_gene_list(GENE_DISPLAY_FILE)
+        }
+        requested_gene_mask = np.asarray([
+            str(gene).lower() in requested_for_retention for gene in adata.var_names
+        ])
+        keep_gene_mask = keep_gene_mask | requested_gene_mask
+    else:
+        requested_gene_mask = np.zeros(adata.n_vars, dtype=bool)
+
+    n_removed = int((~keep_gene_mask).sum())
+    n_phage_retained_below_threshold = int((phage_gene_mask & (total_gene_counts < MIN_COUNTS_GENES)).sum())
+    n_requested_retained_below_threshold = int(
+        (requested_gene_mask & ~phage_gene_mask & (total_gene_counts < MIN_COUNTS_GENES)).sum()
+    )
+
+    adata = adata[:, keep_gene_mask].copy()
+    print(f"Removed {n_removed} non-selected genes with fewer than {MIN_COUNTS_GENES} total counts.")
+    if n_phage_retained_below_threshold:
+        print(
+            f"Retained {n_phage_retained_below_threshold} low-count Luz19/LKD16 genes "
+            "for complete phage heatmaps."
+        )
+    if n_requested_retained_below_threshold:
+        print(
+            f"Retained {n_requested_retained_below_threshold} additional low-count genes "
+            "because they were requested in GENE_DISPLAY_FILE."
+        )
 
     # Preserve raw counts AFTER filtering
     adata.layers["counts"] = adata.X.copy()
@@ -262,7 +511,9 @@ def setup_adata() -> sc.AnnData:
 
     # Phage expression sums (raw counts)
     for phage in PHAGE_PREFIXES:
-        mask = adata.var_names.str.contains(re.escape(phage))
+        mask = np.asarray([
+            str(gene).lower().startswith(phage.lower()) for gene in adata.var_names
+        ])
         if mask.sum() == 0:
             print(f"WARNING: No genes matched prefix '{phage}'")
 
@@ -274,7 +525,7 @@ def setup_adata() -> sc.AnnData:
 
         adata.obs[f"{phage.strip(':')}_expression"] = expr
 
-    # Infection encoding: 0=no phage, 1=only luz19, 2=only lkd16, 3=both
+    # Infection encoding: 0=no phage, 1=Only Luz19, 2=Only LKD16, 3=both
     adata.obs["phage_presence"] = (
         (adata.obs["luz19_expression"] > PHAGE_PRESENT_THRESHOLD).astype(int) * 1 +
         (adata.obs["lkd16_expression"] > PHAGE_PRESENT_THRESHOLD).astype(int) * 2
@@ -300,15 +551,15 @@ def setup_adata() -> sc.AnnData:
         if code == 0:
             return "Uninfected"
         if code == 1:
-            return "Only luz19"
+            return "Only Luz19"
         if code == 2:
-            return "Only lkd16"
+            return "Only LKD16"
         return "Coinfected"
 
     adata.obs["phage_state"] = [phage_state(int(x)) for x in adata.obs["phage_presence"]]
     adata.obs["phage_state"] = pd.Categorical(
         adata.obs["phage_state"],
-        categories=["Uninfected", "Only luz19", "Only lkd16", "Coinfected"],
+        categories=["Uninfected", "Only Luz19", "Only LKD16", "Coinfected"],
         ordered=True
     )
 
@@ -388,7 +639,17 @@ def compute_tp_matrices_and_tables(adata: sc.AnnData, genes: list[str]):
 def plot_heatmaps(
     genes_present,
     mats_by_tp,
-    title_prefix,
+    title_template,
+    xlabel,
+    ylabel,
+    colorbar_label,
+    title_fontsize,
+    xlabel_fontsize,
+    ylabel_fontsize,
+    xtick_fontsize,
+    ytick_fontsize,
+    colorbar_label_fontsize,
+    colorbar_tick_fontsize,
     cmap_name,
     figsize,
     share_scale,
@@ -446,17 +707,19 @@ def plot_heatmaps(
 
         im = ax.imshow(mat, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
         cbar = fig.colorbar(im, ax=ax)
-        cbar.set_label(out_prefix)
+        cbar.set_label(colorbar_label, fontsize=colorbar_label_fontsize)
+        cbar.ax.tick_params(labelsize=colorbar_tick_fontsize)
 
         ax.set_xticks(np.arange(len(conds)))
-        ax.set_xticklabels(conds, rotation=0)
+        ax.set_xticklabels(conds, rotation=0, fontsize=xtick_fontsize)
 
+        display_labels = [format_gene_display_name(gene) for gene in genes_present]
         ax.set_yticks(np.arange(len(genes_present)))
-        ax.set_yticklabels(genes_present)
+        ax.set_yticklabels(display_labels, fontsize=ytick_fontsize)
 
-        ax.set_xlabel(STYLE["xlabel"])
-        ax.set_ylabel(STYLE["ylabel"])
-        ax.set_title(f"{title_prefix}{tp}")
+        ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
+        ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+        ax.set_title(title_template.format(timepoint=tp), fontsize=title_fontsize)
 
         if do_annotate:
             for r in range(mat.shape[0]):
@@ -476,7 +739,7 @@ def plot_heatmaps(
             print(f"Annotation disabled for {out_prefix} (genes={len(genes_present)} > {annotate_max_genes}).")
 
         fig.tight_layout()
-        save_png(fig, f"{out_prefix}_heatmap_{tp}_genes_union_topvar{TOP_N_VAR_GENES}")
+        save_png(fig, f"{out_prefix}_heatmap_{tp}_displayed_genes")
 
 
 # =============================================================================
@@ -503,7 +766,7 @@ def write_tables_to_csv(tables_by_tp, ncells_by_tp):
 def run_coinfection_stats(adata: sc.AnnData):
     """
     Per timepoint, per phage gene:
-      - Compare Coinfected vs phage-specific Single (Only luz19 OR Only lkd16)
+      - Compare Coinfected vs phage-specific Single (Only Luz19 OR Only LKD16)
       - Mann–Whitney U on per-cell expression vector (adata.X by default)
       - Fisher exact on detection (>0 raw counts) (optional)
 
@@ -530,9 +793,9 @@ def run_coinfection_stats(adata: sc.AnnData):
         for phage_prefix in PHAGE_PREFIXES:
             phage_name = phage_prefix.strip(":")
             if phage_name == "luz19":
-                single_label = "Only luz19"
+                single_label = "Only Luz19"
             elif phage_name == "lkd16":
-                single_label = "Only lkd16"
+                single_label = "Only LKD16"
             else:
                 # fallback
                 single_label = f"Only {phage_name}"
@@ -573,7 +836,10 @@ def run_coinfection_stats(adata: sc.AnnData):
                 })
 
             # get phage genes
-            phage_genes = [g for g in adata.var_names if g.startswith(phage_prefix)]
+            phage_genes = [
+                g for g in adata.var_names
+                if str(g).lower().startswith(phage_prefix.lower())
+            ]
             if len(phage_genes) == 0:
                 continue
 
@@ -713,8 +979,8 @@ def run_coinfection_stats(adata: sc.AnnData):
 def plot_total_counts_by_group(adata: sc.AnnData):
     """
     Make per-timepoint boxplots of total raw counts per cell for:
-      - Only luz19
-      - Only lkd16
+      - Only Luz19
+      - Only LKD16
       - Coinfected
 
     Uses:
@@ -744,8 +1010,8 @@ def plot_total_counts_by_group(adata: sc.AnnData):
     # -------------------------------------------------------------------------
     # 2) Build detailed infection labels:
     #    0 = No phage
-    #    1 = Only luz19
-    #    2 = Only lkd16
+    #    1 = Only Luz19
+    #    2 = Only LKD16
     #    3 = Coinfected (both)
     # -------------------------------------------------------------------------
     if "phage_presence" not in adata.obs.columns:
@@ -758,9 +1024,9 @@ def plot_total_counts_by_group(adata: sc.AnnData):
         if code == 0:
             return "No phage"
         elif code == 1:
-            return "Only luz19"
+            return "Only Luz19"
         elif code == 2:
-            return "Only lkd16"
+            return "Only LKD16"
         else:
             return "Coinfected"
 
@@ -770,12 +1036,12 @@ def plot_total_counts_by_group(adata: sc.AnnData):
         ]
         adata.obs["infection_state_detail"] = pd.Categorical(
             adata.obs["infection_state_detail"],
-            categories=["No phage", "Only luz19", "Only lkd16", "Coinfected"],
+            categories=["No phage", "Only Luz19", "Only LKD16", "Coinfected"],
             ordered=True,
         )
 
     # We’ll only plot these three conditions
-    conds_to_plot = ["Only luz19", "Only lkd16", "Coinfected"]
+    conds_to_plot = ["Only Luz19", "Only LKD16", "Coinfected"]
 
     # -------------------------------------------------------------------------
     # 3) Make one figure per timepoint
@@ -815,9 +1081,26 @@ def plot_total_counts_by_group(adata: sc.AnnData):
             patch.set_facecolor(color)
             patch.set_alpha(0.6)
 
-        ax.set_title(f"Total raw counts per cell by infection state ({tp})")
-        ax.set_xlabel("Infection state")
-        ax.set_ylabel("total_counts_raw")
+        ax.set_title(
+            STYLE["total_counts_title"].format(timepoint=tp),
+            fontsize=STYLE["total_counts_title_fontsize"],
+        )
+        ax.set_xlabel(
+            STYLE["total_counts_xlabel"],
+            fontsize=STYLE["total_counts_xlabel_fontsize"],
+        )
+        ax.set_ylabel(
+            STYLE["total_counts_ylabel"],
+            fontsize=STYLE["total_counts_ylabel_fontsize"],
+        )
+        ax.tick_params(
+            axis="x",
+            labelsize=STYLE["total_counts_xtick_fontsize"],
+        )
+        ax.tick_params(
+            axis="y",
+            labelsize=STYLE["total_counts_ytick_fontsize"],
+        )
         #ax.set_yscale("log")  # often helpful for count data; remove if you prefer linear
 
         fig.tight_layout()
@@ -831,9 +1114,10 @@ def main():
     ensure_outdir()
     adata = setup_adata()
 
-    # Select genes: union of top-variance genes per timepoint
-    genes = pick_genes_union_high_variance_per_timepoint(adata, TOP_N_VAR_GENES)
-    print(f"Heatmaps will use {len(genes)} genes (same gene list for all timepoints).")
+    # Select genes from an optional ordered text file, or default to all phage genes.
+    genes, missing_genes = select_heatmap_genes(adata, GENE_DISPLAY_FILE)
+    write_displayed_gene_lists(genes, missing_genes)
+    print(f"Heatmaps will use {len(genes)} genes in the listed order for every timepoint.")
 
     # Compute per-timepoint matrices + tables
     genes_present, mats_mean, mats_hits, mats_hpc, ncells_by_tp, tables_by_tp = compute_tp_matrices_and_tables(
@@ -844,9 +1128,19 @@ def main():
     plot_heatmaps(
         genes_present=genes_present,
         mats_by_tp=mats_mean,
-        title_prefix=STYLE["title_mean_prefix"],
+        title_template=STYLE["mean_title"],
+        xlabel=STYLE["mean_xlabel"],
+        ylabel=STYLE["mean_ylabel"],
+        colorbar_label=STYLE["mean_colorbar_label"],
+        title_fontsize=STYLE["mean_title_fontsize"],
+        xlabel_fontsize=STYLE["mean_xlabel_fontsize"],
+        ylabel_fontsize=STYLE["mean_ylabel_fontsize"],
+        xtick_fontsize=STYLE["mean_xtick_fontsize"],
+        ytick_fontsize=STYLE["mean_ytick_fontsize"],
+        colorbar_label_fontsize=STYLE["mean_colorbar_label_fontsize"],
+        colorbar_tick_fontsize=STYLE["mean_colorbar_tick_fontsize"],
         cmap_name=STYLE["mean_heatmap_cmap"],
-        figsize=STYLE["mean_heatmap_figsize"],
+        figsize=heatmap_figsize(len(genes_present)),
         share_scale=STYLE["mean_heatmap_share_color_scale"],
         out_prefix="mean_expr",
         annotate=False,
@@ -858,9 +1152,19 @@ def main():
         plot_heatmaps(
             genes_present=genes_present,
             mats_by_tp=mats_hpc,
-            title_prefix=STYLE["title_hits_prefix"],
+            title_template=STYLE["hits_title"],
+            xlabel=STYLE["hits_xlabel"],
+            ylabel=STYLE["hits_ylabel"],
+            colorbar_label=STYLE["hits_colorbar_label"],
+            title_fontsize=STYLE["hits_title_fontsize"],
+            xlabel_fontsize=STYLE["hits_xlabel_fontsize"],
+            ylabel_fontsize=STYLE["hits_ylabel_fontsize"],
+            xtick_fontsize=STYLE["hits_xtick_fontsize"],
+            ytick_fontsize=STYLE["hits_ytick_fontsize"],
+            colorbar_label_fontsize=STYLE["hits_colorbar_label_fontsize"],
+            colorbar_tick_fontsize=STYLE["hits_colorbar_tick_fontsize"],
             cmap_name=STYLE["hits_per_cell_cmap"],
-            figsize=STYLE["hits_per_cell_figsize"],
+            figsize=heatmap_figsize(len(genes_present)),
             share_scale=STYLE["hits_per_cell_share_color_scale"],
             out_prefix="mean_hits_per_cell_raw",
             annotate=STYLE.get("annotate_hits_per_cell", True),

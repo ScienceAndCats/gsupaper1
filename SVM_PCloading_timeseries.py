@@ -1,12 +1,11 @@
 """
-PCA-SVM for prediction + gene-level interpretation (correctly).
+PCA-SVM for prediction + gene-level interpretation.
 
 - Train/evaluate linear SVM using PCA features (standard scRNA workflow)
 - Interpret back to genes:
-    (A) Project PCA-SVM weights back to genes using PCA loadings  ✅ correct
-    (B) Train a gene-space linear SVM for interpretation only     ✅ optional
+    (A) Project PCA-SVM weights back to genes using PCA loadings
+    (B) Train a gene-space linear SVM for interpretation only
 
-Keeps your same FILE_PATH convention and preprocessing steps.
 """
 
 import os
@@ -54,6 +53,11 @@ STYLE = {
     "umap_marker_size": 12,
     "umap_width": 1000,
     "umap_height": 1000,
+    "umap_title_font_size": 32,
+    "umap_legend_font_size": 24,
+    "umap_legend_title_font_size": 24,
+    "umap_axis_title_font_size": 24,
+    "umap_tick_font_size": 16,
 
     # Confusion matrix colorscale
     "cm_colorscale": "Blues",
@@ -122,8 +126,12 @@ TEST_SIZE = 0.25          # 25% holdout for test
 RANDOM_STATE = 42
 
 PC_INDEX_FOR_LOADINGS_PLOT = 0   # PC1 if 0, PC2 if 1, etc.
-TOP_N_PCA_LOADINGS = 20
+TOP_N_PCA_LOADINGS = 15
 TOP_N_GENE_IMPORTANCE = 30       # for gene-weight plots
+
+# PCA gene-loading plot labels
+PCA_LOADINGS_Y_AXIS_LABEL = "PCA loading"
+STRIP_GENE_PREFIX_FOR_PLOT = True  # True: luz19:gp43 -> gp43
 
 
 # ------------------------------------------------------------------------------
@@ -171,9 +179,35 @@ def get_top_genes_for_pc(adata, pc_index=0, top_n=20) -> pd.DataFrame:
 
 def get_pca_loadings_figure(adata, pc_index=0, top_n=20):
     df = get_top_genes_for_pc(adata, pc_index, top_n)
-    fig = px.bar(df, x="Gene", y=f"PC{pc_index + 1}_loading",
-                 title=f"Top {top_n} Gene Loadings for PC{pc_index + 1}")
-    fig.update_layout(xaxis_tickangle=45)
+
+    # Keep the original gene names in the data, but optionally shorten only
+    # the labels displayed on the x-axis (for example, luz19:gp43 -> gp43).
+    if STRIP_GENE_PREFIX_FOR_PLOT:
+        df["Gene_display"] = df["Gene"].astype(str).str.rsplit(":", n=1).str[-1]
+    else:
+        df["Gene_display"] = df["Gene"].astype(str)
+
+    loading_column = f"PC{pc_index + 1}_loading"
+    fig = px.bar(
+        df,
+        x="Gene_display",
+        y=loading_column,
+        custom_data=["Gene"],
+        labels={
+            "Gene_display": "Gene",
+            loading_column: PCA_LOADINGS_Y_AXIS_LABEL,
+        },
+        title=f"Top {top_n} Gene Loadings for PC{pc_index + 1}",
+    )
+    fig.update_traces(
+        hovertemplate=(
+            "Displayed gene=%{x}<br>"
+            "Full gene=%{customdata[0]}<br>"
+            + PCA_LOADINGS_Y_AXIS_LABEL
+            + "=%{y}<extra></extra>"
+        )
+    )
+    fig.update_layout(xaxis_tickangle=90)
     return apply_plotly_style(fig)
 
 
@@ -316,11 +350,28 @@ def run_umap_and_svm():
         x="UMAP1", y="UMAP2",
         color="svm_pred_class_2class",
         hover_data=["cell_name", "time_group"],
-        title="UMAP - PCA-SVM Predicted Group (2-class: 10min vs >30min)",
+        labels={"svm_pred_class_2class": "SVM Predicted Class"},
+        title="UMAP, PCA-SVM Predicted Group",
         color_discrete_map=STYLE["class_colors"]
     )
     fig_umap.update_traces(marker=dict(size=STYLE["umap_marker_size"], opacity=0.8))
-    fig_umap.update_layout(width=STYLE["umap_width"], height=STYLE["umap_height"])
+    fig_umap.update_layout(
+        width=STYLE["umap_width"],
+        height=STYLE["umap_height"],
+        title=dict(font=dict(size=STYLE["umap_title_font_size"])),
+        legend=dict(
+            font=dict(size=STYLE["umap_legend_font_size"]),
+            title_font=dict(size=STYLE["umap_legend_title_font_size"]),
+        ),
+        xaxis=dict(
+            title_font=dict(size=STYLE["umap_axis_title_font_size"]),
+            tickfont=dict(size=STYLE["umap_tick_font_size"]),
+        ),
+        yaxis=dict(
+            title_font=dict(size=STYLE["umap_axis_title_font_size"]),
+            tickfont=dict(size=STYLE["umap_tick_font_size"]),
+        ),
+    )
 
     # -----------------------------------------
     # (2) Interpret PCA-SVM back to GENE weights
