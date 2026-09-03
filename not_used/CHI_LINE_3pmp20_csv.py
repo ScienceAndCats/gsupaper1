@@ -12,7 +12,7 @@ import pandas as pd
 # ----------------------------------
 # USER SETTINGS
 # ----------------------------------
-DATA_DIR = "processed_data"
+DATA_DIR = "../processed_data"
 DATA_FILE = "JRG09-3PMP20/JRG09-3PMP20_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
 FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 
@@ -86,7 +86,7 @@ else:
     pev2_hits = adata_coinf[:, pev2_mask].X.sum(axis=1)
     lkd_hits = adata_coinf[:, lkd_mask].X.sum(axis=1)
 
-with open("pev2_lkd16_coinfected_cells.txt", "w") as f:
+with open("../pev2_lkd16_coinfected_cells.txt", "w") as f:
     f.write("cell_id\tpev2_hits\tlkd16_hits\n")
     for cell, p_hits, l_hits in zip(
         adata_coinf.obs_names, pev2_hits, lkd_hits

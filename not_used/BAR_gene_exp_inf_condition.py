@@ -18,7 +18,7 @@ import pandas as pd
 # ----------------------------------
 # USER SETTINGS (edit in PyCharm)
 # ----------------------------------
-DATA_DIR = "processed_data"
+DATA_DIR = "../processed_data"
 DATA_FILE = "JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix.txt"
 FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 

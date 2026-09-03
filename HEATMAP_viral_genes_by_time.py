@@ -200,8 +200,15 @@ def build_heatmap():
     # Ensure output directory exists and save PNG
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_path = os.path.join(OUTPUT_DIR, OUTPUT_PNG)
+
+    # Make a csv too cause James wants it
+    csv_output_path = os.path.join(OUTPUT_DIR, "luz19_gene_expression_heatmap.csv")
+    rotated_df.to_csv(csv_output_path)
+    print(f"Heatmap values saved to: {csv_output_path}")
+
     fig.write_image(output_path, scale=2)
     print(f"\nHeatmap saved to: {output_path}")
+
 
     fig.show()
     return fig

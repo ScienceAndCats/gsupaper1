@@ -87,4 +87,23 @@ plt.show()
 # p_val = np.sum(np.array(simulated_means) >= mean_corr_real) / n_sim
 p_val = (np.sum(np.array(simulated_means) >= mean_corr_real) + 1) / (n_sim + 1) # To ensure p_val never equals exactly 0, apply a "continuity correction" (or pseudo-count). This method is standard in Monte Carlo p-value estimation.
 
+# save values to CSV for James
+os.makedirs("graph_outputs", exist_ok=True)
+csv_output_path = os.path.join("graph_outputs", "luz19_gene_correlation_monte_carlo.csv")
+
+np.savetxt(
+    csv_output_path,
+    np.column_stack((
+        np.arange(1, n_sim + 1),
+        simulated_means,
+        np.full(n_sim, mean_corr_real),
+        np.full(n_sim, p_val)
+    )),
+    delimiter=",",
+    header="simulation,simulated_mean_correlation,observed_mean_correlation,p_value",
+    comments=""
+)
+
+print(f"Monte Carlo values saved to: {csv_output_path}")
+
 print(f"p-value: {p_val:.3e}")  # Show in scientific notation with 3 decimal places
