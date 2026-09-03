@@ -24,11 +24,11 @@ import matplotlib.pyplot as plt
 # =============================================================================
 # USER SETTINGS
 # =============================================================================
-DATA_DIR = "processed_data"
+DATA_DIR = "../processed_data"
 DATA_FILE = "JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix.txt"
 FILE_PATH = os.path.join(DATA_DIR, DATA_FILE)
 
-GRAPH_OUTPUT_DIR = "graph_outputs"
+GRAPH_OUTPUT_DIR = "../graph_outputs"
 
 # Filtering
 MIN_COUNTS_CELLS = 5

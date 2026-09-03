@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 # ----------------------------------
 # USER SETTINGS (edit in PyCharm)
 # ----------------------------------
-DATA_DIR = "processed_data"
+DATA_DIR = "../processed_data"
 # Use a gene-matrix text file like in your SVM script:
 # rows = cells, columns = genes, tab-separated, first column = cell IDs
 DATA_FILE = "JRG07-Sample-P3/JRG07-Sample-P3_v11_threshold_0_mixed_species_gene_matrix_multihitcombo.txt"
