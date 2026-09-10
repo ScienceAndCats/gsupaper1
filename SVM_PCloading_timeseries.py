@@ -472,6 +472,106 @@ def run_umap_and_svm():
     ):
         apply_plotly_style(fig)
 
+
+
+    # -------------------------
+    # Save source data for each graph to CSV
+    # -------------------------
+    os.makedirs(GRAPH_OUTPUT_DIR, exist_ok=True)
+
+    # UMAP
+    umap_csv = umap_df[
+        ["cell_name", "UMAP1", "UMAP2", "time_group", "svm_pred_class_2class"]
+    ].copy()
+
+    # Confusion matrix
+    cm_csv = pd.DataFrame(
+        cm,
+        index=y_labels,
+        columns=x_labels
+    )
+    cm_csv.index.name = "True class"
+    cm_csv = cm_csv.reset_index()
+
+    # Precision-recall curve
+    pr_csv = pd.DataFrame({
+        "recall": recall,
+        "precision": precision,
+        "average_precision": avg_prec
+    })
+
+    # Gene importance projected from PCA-SVM
+    gene_from_pca_csv = pd.DataFrame({
+        "Gene": top_genes,
+        "projected_weight_abs": top_vals
+    })
+
+    # Direct gene-SVM importance
+    gene_direct_csv = pd.DataFrame({
+        "Gene": top_genes2,
+        "coefficient_abs": top_vals2
+    })
+
+    # Decision boundary:
+    # save both the decision-region grid and the overlaid test points
+    decision_grid_csv = pd.DataFrame({
+        "row_type": "decision_grid",
+        "PC1": xx.ravel(),
+        "PC2": yy.ravel(),
+        "decision_region_numeric": Z.ravel(),
+        "decision_region": [inv_map[int(v)] for v in Z.ravel()],
+        "test_true_class": np.nan
+    })
+
+    decision_points_csv = pd.DataFrame({
+        "row_type": "test_point",
+        "PC1": X2_test[:, 0],
+        "PC2": X2_test[:, 1],
+        "decision_region_numeric": np.nan,
+        "decision_region": np.nan,
+        "test_true_class": [inv_map[int(v)] for v in y_test]
+    })
+
+    decision_csv = pd.concat(
+        [decision_grid_csv, decision_points_csv],
+        ignore_index=True
+    )
+
+    # PCA loading graph
+    pca_loadings_csv = get_top_genes_for_pc(
+        adata,
+        pc_index=PC_INDEX_FOR_LOADINGS_PLOT,
+        top_n=TOP_N_PCA_LOADINGS
+    )
+
+    if STRIP_GENE_PREFIX_FOR_PLOT:
+        pca_loadings_csv["Gene_display"] = (
+            pca_loadings_csv["Gene"]
+            .astype(str)
+            .str.rsplit(":", n=1)
+            .str[-1]
+        )
+    else:
+        pca_loadings_csv["Gene_display"] = pca_loadings_csv["Gene"].astype(str)
+
+    # Save all CSV files
+    csv_outputs = {
+        "umap_pca_svm_predictions": umap_csv,
+        "confusion_matrix_testset": cm_csv,
+        "precision_recall_curve_testset": pr_csv,
+        "gene_importance_from_pca_svm": gene_from_pca_csv,
+        "gene_importance_direct_gene_svm": gene_direct_csv,
+        "decision_boundary_pc1_pc2": decision_csv,
+        "pca_loadings_PC{}".format(PC_INDEX_FOR_LOADINGS_PLOT + 1): pca_loadings_csv,
+    }
+
+    for base_name, df in csv_outputs.items():
+        csv_path = os.path.join(GRAPH_OUTPUT_DIR, base_name + ".csv")
+        df.to_csv(csv_path, index=False)
+        print(f"Saved CSV: {csv_path}")
+
+
+
     # Save figures to disk
     save_fig(fig_umap, "umap_pca_svm_predictions")
     save_fig(fig_cm, "confusion_matrix_testset")
